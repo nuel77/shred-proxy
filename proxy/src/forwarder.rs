@@ -219,34 +219,11 @@ fn recv_from_channel_and_send_multiple_dest(
                         (!packet.meta().discard()) as u64,
                     )
                 });
-
-            const METRICS_MAX_SIZE: u64 = 100_000;
-            let total = metrics
+            metrics
                 .packet_source_metrics
-                .iter()
-                .map(|e| *e.value())
-                .sum::<u64>();
-            if total > METRICS_MAX_SIZE {
-                // print the percentage of shred we received from each source
-                let summary = metrics
-                    .packet_source_metrics
-                    .iter()
-                    .map(|entry| {
-                        let ip = entry.key();
-                        let percent = (entry.value() * 100) / total;
-                        format!("Ip: {ip}, Received: {percent:?}%")
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" | ");
-                info!("{summary}");
-                metrics.packet_source_metrics.clear();
-            } else {
-                metrics
-                    .packet_source_metrics
-                    .entry(packet.meta().addr)
-                    .and_modify(|count| *count += 1)
-                    .or_insert(0);
-            }
+                .entry(packet.meta().addr)
+                .and_modify(|count| *count += 1)
+                .or_insert(0);
         });
     });
 
@@ -444,6 +421,7 @@ pub fn start_forwarder_accessory_thread(
 
                     // send metrics to influx
                     recv(metrics_tick) -> _ => {
+                        metrics.log();
                         metrics.report();
                         metrics.reset();
                     }
@@ -520,6 +498,25 @@ impl ShredMetrics {
         }
     }
 
+    pub fn log(&self) {
+        let total = self
+            .packet_source_metrics
+            .iter()
+            .map(|e| *e.value())
+            .sum::<u64>();
+
+        let summary = self
+            .packet_source_metrics
+            .iter()
+            .map(|entry| {
+                let ip = entry.key();
+                let percent = (entry.value() * 100) / total;
+                format!("Ip: {ip}, Received: {percent:?}%")
+            })
+            .collect::<Vec<_>>()
+            .join(" | ");
+        info!("{summary}");
+    }
     pub fn report(&self) {
         datapoint_info!(
             "shredstream_proxy-connection_metrics",
