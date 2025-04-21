@@ -13,6 +13,8 @@ fn main() {
                 "protos/auth.proto",
                 "protos/shared.proto",
                 "protos/shredstream.proto",
+                "protos/geyser.proto",
+                "protos/solana-storage.proto",
             ],
             &["protos"],
         )

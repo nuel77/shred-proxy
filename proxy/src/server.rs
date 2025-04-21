@@ -6,6 +6,7 @@ use std::{
 };
 
 use crossbeam_channel::Receiver;
+use jito_protos::geyser::{SubscribeRequest, SubscribeUpdate};
 use jito_protos::shredstream::{
     shredstream_proxy_server::{ShredstreamProxy, ShredstreamProxyServer},
     Entry as PbEntry, SubscribeEntriesRequest,
@@ -54,6 +55,7 @@ pub fn start_server_thread(
 #[tonic::async_trait]
 impl ShredstreamProxy for ShredstreamProxyService {
     type SubscribeEntriesStream = ReceiverStream<Result<PbEntry, tonic::Status>>;
+    type SubscribeStream = ReceiverStream<Result<SubscribeUpdate, tonic::Status>>;
 
     async fn subscribe_entries(
         &self,
@@ -75,5 +77,12 @@ impl ShredstreamProxy for ShredstreamProxyService {
         });
 
         Ok(tonic::Response::new(ReceiverStream::new(rx)))
+    }
+
+    async fn subscribe(
+        &self,
+        _request: tonic::Request<tonic::Streaming<SubscribeRequest>>,
+    ) -> Result<tonic::Response<Self::SubscribeStream>, tonic::Status> {
+        unimplemented!()
     }
 }
