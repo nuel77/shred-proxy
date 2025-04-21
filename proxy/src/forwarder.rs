@@ -122,8 +122,6 @@ pub fn start_forwarder_threads(
                         >,
                     > = HashMap::with_capacity(MAX_PROCESSING_AGE);
 
-                    let mut packet_source_metrics = HashMap::new();
-
                     while !exit.load(Ordering::Relaxed) {
                         crossbeam_channel::select! {
                             // forward packets
@@ -140,7 +138,6 @@ pub fn start_forwarder_threads(
                                     &entry_sender,
                                     debug_trace_shred,
                                     &metrics,
-                                    &mut packet_source_metrics
                                 );
 
                                 // If the channel is closed or error, break out
@@ -187,7 +184,6 @@ fn recv_from_channel_and_send_multiple_dest(
     entry_sender: &Sender<PbEntry>,
     debug_trace_shred: bool,
     metrics: &ShredMetrics,
-    packet_source_metrics: &mut HashMap<IpAddr, u32>,
 ) -> Result<(), ShredstreamProxyError> {
     let packet_batch = maybe_packet_batch.map_err(ShredstreamProxyError::RecvError)?;
     let trace_shred_received_time = SystemTime::now();
@@ -224,22 +220,29 @@ fn recv_from_channel_and_send_multiple_dest(
                     )
                 });
 
-            const METRICS_MAX_SIZE: u32 = 100_000;
-            if packet_source_metrics.values().sum::<u32>() == METRICS_MAX_SIZE {
+            const METRICS_MAX_SIZE: u64 = 100_000;
+            let total = metrics
+                .packet_source_metrics
+                .iter()
+                .map(|e| *e.value())
+                .sum::<u64>();
+            if total == METRICS_MAX_SIZE {
                 // print the percentage of shred we received from each source
-                let summary = packet_source_metrics
+                let summary = metrics
+                    .packet_source_metrics
                     .iter()
-                    .map(|(ip, count)| {
-                        let percent = (count * 100) / METRICS_MAX_SIZE;
+                    .map(|entry| {
+                        let ip = entry.key();
+                        let percent = (entry.value() * 100) / METRICS_MAX_SIZE;
                         format!("Ip: {ip}, first shred received: {percent:?}%")
                     })
                     .collect::<Vec<_>>()
                     .join(" | ");
-
                 info!("{summary}");
-                packet_source_metrics.clear();
+                metrics.packet_source_metrics.clear();
             } else {
-                packet_source_metrics
+                metrics
+                    .packet_source_metrics
                     .entry(packet.meta().addr)
                     .and_modify(|count| *count += 1)
                     .or_insert(0);
@@ -467,7 +470,8 @@ pub struct ShredMetrics {
     pub duplicate: AtomicU64,
     /// (discarded, not discarded, from other shredstream instances)
     pub packets_received: DashMap<IpAddr, (u64, u64)>,
-
+    /// no of time we see the packet first by the given ip address
+    pub packet_source_metrics: DashMap<IpAddr, u64>,
     // service metrics
     pub enabled_grpc_service: bool,
     /// Number of data shreds recovered using coding shreds
@@ -503,6 +507,7 @@ impl ShredMetrics {
             fail_forward: Default::default(),
             duplicate: Default::default(),
             packets_received: DashMap::with_capacity(10),
+            packet_source_metrics: DashMap::with_capacity(10),
             recovered_count: Default::default(),
             entry_count: Default::default(),
             txn_count: Default::default(),
