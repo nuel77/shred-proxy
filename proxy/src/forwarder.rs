@@ -227,7 +227,7 @@ fn recv_from_channel_and_send_multiple_dest(
                 .map(|e| *e.value())
                 .sum::<u64>();
             info!("total is : {}", total);
-            if total == METRICS_MAX_SIZE {
+            if total > METRICS_MAX_SIZE {
                 // print the percentage of shred we received from each source
                 let summary = metrics
                     .packet_source_metrics
