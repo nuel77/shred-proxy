@@ -10,7 +10,7 @@ pub mod shredstream {
     tonic::include_proto!("shredstream");
 }
 
-pub mod geyser{
+pub mod geyser {
     tonic::include_proto!("geyser");
 }
 
