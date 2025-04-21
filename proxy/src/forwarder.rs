@@ -224,12 +224,19 @@ fn recv_from_channel_and_send_multiple_dest(
                     )
                 });
 
-            if packet_source_metrics.values().sum::<u32>() == 1000u32 {
+            const METRICS_MAX_SIZE: u32 = 100_000;
+            if packet_source_metrics.values().sum::<u32>() == METRICS_MAX_SIZE {
                 // print the percentage of shred we received from each source
-                for (ip, count) in packet_source_metrics.iter() {
-                    let percent = (count * 100) / 1000;
-                    info!("Ip: {ip}, first shred received: {:?}%", percent);
-                }
+                let summary = packet_source_metrics
+                    .iter()
+                    .map(|(ip, count)| {
+                        let percent = (count * 100) / METRICS_MAX_SIZE;
+                        format!("Ip: {ip}, first shred received: {percent:?}%")
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" | ");
+
+                info!("{summary}");
                 packet_source_metrics.clear();
             } else {
                 packet_source_metrics
