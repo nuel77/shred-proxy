@@ -226,7 +226,6 @@ fn recv_from_channel_and_send_multiple_dest(
                 .iter()
                 .map(|e| *e.value())
                 .sum::<u64>();
-            info!("total is : {}", total);
             if total > METRICS_MAX_SIZE {
                 // print the percentage of shred we received from each source
                 let summary = metrics
@@ -234,7 +233,7 @@ fn recv_from_channel_and_send_multiple_dest(
                     .iter()
                     .map(|entry| {
                         let ip = entry.key();
-                        let percent = (entry.value() * 100) / METRICS_MAX_SIZE;
+                        let percent = (entry.value() * 100) / total;
                         format!("Ip: {ip}, Received: {percent:?}%")
                     })
                     .collect::<Vec<_>>()
