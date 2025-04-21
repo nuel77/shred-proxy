@@ -122,6 +122,8 @@ pub fn start_forwarder_threads(
                         >,
                     > = HashMap::with_capacity(MAX_PROCESSING_AGE);
 
+                    let mut packet_source_metrics = HashMap::new();
+
                     while !exit.load(Ordering::Relaxed) {
                         crossbeam_channel::select! {
                             // forward packets
@@ -138,6 +140,7 @@ pub fn start_forwarder_threads(
                                     &entry_sender,
                                     debug_trace_shred,
                                     &metrics,
+                                    &mut packet_source_metrics
                                 );
 
                                 // If the channel is closed or error, break out
@@ -184,6 +187,7 @@ fn recv_from_channel_and_send_multiple_dest(
     entry_sender: &Sender<PbEntry>,
     debug_trace_shred: bool,
     metrics: &ShredMetrics,
+    packet_source_metrics: &mut HashMap<IpAddr, u32>,
 ) -> Result<(), ShredstreamProxyError> {
     let packet_batch = maybe_packet_batch.map_err(ShredstreamProxyError::RecvError)?;
     let trace_shred_received_time = SystemTime::now();
@@ -219,6 +223,20 @@ fn recv_from_channel_and_send_multiple_dest(
                         (!packet.meta().discard()) as u64,
                     )
                 });
+
+            if packet_source_metrics.values().sum::<u32>() == 1000u32 {
+                // print the percentage of shred we received from each source
+                for (ip, count) in packet_source_metrics.iter() {
+                    let percent = (count * 100) / 1000;
+                    info!("Ip: {ip}, first shred received: {:?}%", percent);
+                }
+                packet_source_metrics.clear();
+            } else {
+                packet_source_metrics
+                    .entry(packet.meta().addr)
+                    .and_modify(|count| *count += 1)
+                    .or_insert(0);
+            }
         });
     });
 
