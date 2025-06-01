@@ -219,6 +219,11 @@ fn recv_from_channel_and_send_multiple_dest(
                         (!packet.meta().discard()) as u64,
                     )
                 });
+            metrics
+                .packet_source_metrics
+                .entry(packet.meta().addr)
+                .and_modify(|count| *count += 1)
+                .or_insert(0);
         });
     });
 
@@ -416,6 +421,7 @@ pub fn start_forwarder_accessory_thread(
 
                     // send metrics to influx
                     recv(metrics_tick) -> _ => {
+                        metrics.log();
                         metrics.report();
                         metrics.reset();
                     }
@@ -442,7 +448,8 @@ pub struct ShredMetrics {
     pub duplicate: AtomicU64,
     /// (discarded, not discarded, from other shredstream instances)
     pub packets_received: DashMap<IpAddr, (u64, u64)>,
-
+    /// no of time we see the packet first by the given ip address
+    pub packet_source_metrics: DashMap<IpAddr, u64>,
     // service metrics
     pub enabled_grpc_service: bool,
     /// Number of data shreds recovered using coding shreds
@@ -478,6 +485,7 @@ impl ShredMetrics {
             fail_forward: Default::default(),
             duplicate: Default::default(),
             packets_received: DashMap::with_capacity(10),
+            packet_source_metrics: DashMap::with_capacity(10),
             recovered_count: Default::default(),
             entry_count: Default::default(),
             txn_count: Default::default(),
@@ -490,6 +498,25 @@ impl ShredMetrics {
         }
     }
 
+    pub fn log(&self) {
+        let total = self
+            .packet_source_metrics
+            .iter()
+            .map(|e| *e.value())
+            .sum::<u64>();
+
+        let summary = self
+            .packet_source_metrics
+            .iter()
+            .map(|entry| {
+                let ip = entry.key();
+                let percent = (entry.value() * 100) / total;
+                format!("Ip: {ip}, Received: {percent:?}%")
+            })
+            .collect::<Vec<_>>()
+            .join(" | ");
+        info!("{summary}");
+    }
     pub fn report(&self) {
         datapoint_info!(
             "shredstream_proxy-connection_metrics",
